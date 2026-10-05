@@ -1,69 +1,292 @@
-import Image from "next/image";
+"use client";
+
+import { useState, type FormEvent } from "react";
+import { contacts } from "@/data/contacts";
+import { parseIntent } from "@/lib/intent/parseIntent";
+import { resolveRecipient } from "@/lib/resolver/resolveRecipient";
+import type {
+  CandidateScore,
+  Contact,
+  PaymentIntent,
+  ResolverResult,
+} from "@/types/payment";
+
+const DEFAULT_REQUEST = "Pay John $15 for dinner";
 
 export default function Home() {
+  const [request, setRequest] = useState(DEFAULT_REQUEST);
+  const [intent, setIntent] = useState<PaymentIntent | null>(null);
+  const [result, setResult] = useState<ResolverResult | null>(null);
+  const [selected, setSelected] = useState<Contact | null>(null);
+  const [receiptId, setReceiptId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function resetResult() {
+    setIntent(null);
+    setResult(null);
+    setSelected(null);
+    setReceiptId(null);
+    setError(null);
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    resetResult();
+
+    try {
+      const parsed = parseIntent(request);
+      const resolution = resolveRecipient(parsed, contacts);
+
+      setIntent(parsed);
+      setResult(resolution);
+
+      if (resolution.kind === "confident") {
+        setSelected(resolution.candidate.contact);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to understand that payment request.",
+      );
+    }
+  }
+
+  function confirmPayment() {
+    if (!selected || !intent) return;
+    setReceiptId(`MOCK-${Date.now()}`);
+  }
+
+  function renderCandidate(candidate: CandidateScore) {
+    return (
+      <button
+        key={candidate.contact.id}
+        type="button"
+        onClick={() => {
+          setSelected(candidate.contact);
+          setReceiptId(null);
+        }}
+        className={`w-full rounded-2xl border p-4 text-left transition ${
+          selected?.id === candidate.contact.id
+            ? "border-black bg-neutral-100"
+            : "border-neutral-200 hover:border-neutral-400"
+        }`}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="font-semibold">{candidate.contact.fullName}</p>
+            <p className="text-sm text-neutral-500">
+              @{candidate.contact.paypalId}
+            </p>
+          </div>
+
+          <span className="rounded-full bg-neutral-100 px-3 py-1 text-sm font-medium">
+            Score {(candidate.score * 100).toFixed(0)}/100
+          </span>
+        </div>
+
+        {candidate.reasons.length > 0 && (
+          <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-neutral-600">
+            {candidate.reasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
+        )}
+      </button>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
+    <main className="min-h-screen bg-neutral-50 px-6 py-12 text-neutral-950">
+      <div className="mx-auto max-w-2xl">
+        <div className="mb-10">
+          <p className="mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-neutral-500">
+            KilnGrid
+          </p>
+
+          <h1 className="text-4xl font-semibold tracking-tight">
+            Pay someone the way you remember them.
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+
+          <p className="mt-4 max-w-xl text-neutral-600">
+            Describe the payment naturally. KilnGrid resolves the person,
+            explains why, and asks you to confirm before anything is sent.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm"
+        >
+          <label htmlFor="payment-request" className="text-sm font-medium">
+            Payment request
+          </label>
+
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+            <input
+              id="payment-request"
+              value={request}
+              onChange={(event) => setRequest(event.target.value)}
+              placeholder='Pay John $15 for dinner'
+              className="min-w-0 flex-1 rounded-xl border border-neutral-300 px-4 py-3 outline-none transition focus:border-black"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+
+            <button
+              type="submit"
+              className="rounded-xl bg-black px-5 py-3 font-medium text-white transition hover:bg-neutral-800"
+            >
+              Resolve
+            </button>
+          </div>
+
+          <p className="mt-3 text-xs text-neutral-500">
+            Try: Pay John $15 for dinner
+          </p>
+        </form>
+
+        {error && (
+          <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {error}
+          </div>
+        )}
+
+        {intent && (
+          <div className="mt-6 rounded-2xl border border-neutral-200 bg-white p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-500">
+              Parsed intent
+            </p>
+
+            <div className="mt-3 grid grid-cols-2 gap-4 text-sm sm:grid-cols-4">
+              <div>
+                <p className="text-neutral-500">Name</p>
+                <p className="font-medium">{intent.recipientName}</p>
+              </div>
+
+              <div>
+                <p className="text-neutral-500">Amount</p>
+                <p className="font-medium">${intent.amount.toFixed(2)}</p>
+              </div>
+
+              <div>
+                <p className="text-neutral-500">Currency</p>
+                <p className="font-medium">{intent.currency}</p>
+              </div>
+
+              <div>
+                <p className="text-neutral-500">Note</p>
+                <p className="font-medium">{intent.note || "None"}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {result?.kind === "confident" && (
+          <section className="mt-6">
+            <div className="mb-3">
+              <h2 className="text-xl font-semibold">Best match</h2>
+              <p className="text-sm text-neutral-500">
+                We found one clear recipient.
+              </p>
+            </div>
+
+            {renderCandidate(result.candidate)}
+          </section>
+        )}
+
+        {result?.kind === "ambiguous" && (
+          <section className="mt-6">
+            <div className="mb-3">
+              <h2 className="text-xl font-semibold">
+                Which person did you mean?
+              </h2>
+              <p className="text-sm text-neutral-500">
+                These matches are too close to choose automatically.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {result.candidates.map(renderCandidate)}
+            </div>
+          </section>
+        )}
+
+        {result?.kind === "no_match" && (
+          <section className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-5">
+            <h2 className="font-semibold">
+              We need a little more information.
+            </h2>
+
+            <p className="mt-2 text-sm text-neutral-700">
+              There isn&apos;t a confident recipient yet. In the full version,
+              KilnGrid would ask for an email or PayPal ID and remember it for
+              next time.
+            </p>
+          </section>
+        )}
+
+        {selected && intent && !receiptId && (
+          <section className="mt-6 rounded-3xl bg-neutral-950 p-6 text-white">
+            <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
+              Confirm payment
+            </p>
+
+            <div className="mt-4 flex items-end justify-between gap-6">
+              <div>
+                <p className="text-3xl font-semibold">
+                  ${intent.amount.toFixed(2)}
+                </p>
+
+                <p className="mt-1 text-neutral-300">
+                  to {selected.fullName}
+                </p>
+
+                {intent.note && (
+                  <p className="mt-3 text-sm text-neutral-400">
+                    {intent.note}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={confirmPayment}
+                className="rounded-xl bg-white px-5 py-3 font-semibold text-black transition hover:bg-neutral-200"
+              >
+                Confirm
+              </button>
+            </div>
+          </section>
+        )}
+
+        {receiptId && selected && intent && (
+          <section className="mt-6 rounded-3xl border border-neutral-200 bg-white p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-green-700">
+                &#10003;
+              </div>
+
+              <div>
+                <h2 className="font-semibold">Payment complete</h2>
+                <p className="text-sm text-neutral-500">
+                  Mock transaction for the MVP
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 border-t border-neutral-100 pt-5">
+              <p className="text-2xl font-semibold">
+                ${intent.amount.toFixed(2)}
+              </p>
+              <p className="mt-1 text-neutral-600">
+                Paid to {selected.fullName}
+              </p>
+              <p className="mt-3 font-mono text-xs text-neutral-400">
+                {receiptId}
+              </p>
+            </div>
+          </section>
+        )}
+      </div>
+    </main>
   );
 }
