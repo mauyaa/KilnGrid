@@ -4,6 +4,11 @@ import { useState, type FormEvent } from "react";
 import { contacts } from "@/data/contacts";
 import { parseIntent } from "@/lib/intent/parseIntent";
 import { resolveRecipient } from "@/lib/resolver/resolveRecipient";
+import {
+  createSandboxPayout,
+  waitForSandboxPayout,
+  type PayPalPayoutStatus,
+} from "@/lib/paypal/client";
 import type {
   CandidateScore,
   Contact,
@@ -18,14 +23,18 @@ export default function Home() {
   const [intent, setIntent] = useState<PaymentIntent | null>(null);
   const [result, setResult] = useState<ResolverResult | null>(null);
   const [selected, setSelected] = useState<Contact | null>(null);
-  const [receiptId, setReceiptId] = useState<string | null>(null);
+  const [receipt, setReceipt] = useState<PayPalPayoutStatus | null>(null);
+  const [paymentState, setPaymentState] = useState<
+    "idle" | "submitting" | "processing" | "success" | "error"
+  >("idle");
   const [error, setError] = useState<string | null>(null);
 
   function resetResult() {
     setIntent(null);
     setResult(null);
     setSelected(null);
-    setReceiptId(null);
+    setReceipt(null);
+    setPaymentState("idle");
     setError(null);
   }
 
@@ -52,9 +61,35 @@ export default function Home() {
     }
   }
 
-  function confirmPayment() {
+  async function confirmPayment() {
     if (!selected || !intent) return;
-    setReceiptId(`MOCK-${Date.now()}`);
+
+    setError(null);
+    setReceipt(null);
+    setPaymentState("submitting");
+
+    try {
+      const created = await createSandboxPayout({
+        amount: intent.amount,
+        currency: intent.currency,
+        note: intent.note,
+        recipientName: selected.fullName,
+      });
+
+      setPaymentState("processing");
+
+      const completed = await waitForSandboxPayout(created.batchId);
+
+      setReceipt(completed);
+      setPaymentState("success");
+    } catch (err) {
+      setPaymentState("error");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to complete the PayPal sandbox payment.",
+      );
+    }
   }
 
   function renderCandidate(candidate: CandidateScore) {
@@ -64,7 +99,8 @@ export default function Home() {
         type="button"
         onClick={() => {
           setSelected(candidate.contact);
-          setReceiptId(null);
+          setReceipt(null);
+          setPaymentState("idle");
         }}
         className={`w-full rounded-2xl border p-4 text-left transition ${
           selected?.id === candidate.contact.id
@@ -224,7 +260,7 @@ export default function Home() {
           </section>
         )}
 
-        {selected && intent && !receiptId && (
+        {selected && intent && paymentState !== "success" && (
           <section className="mt-6 rounded-3xl bg-neutral-950 p-6 text-white">
             <p className="text-xs font-semibold uppercase tracking-wider text-neutral-400">
               Confirm payment
@@ -250,15 +286,29 @@ export default function Home() {
               <button
                 type="button"
                 onClick={confirmPayment}
-                className="rounded-xl bg-white px-5 py-3 font-semibold text-black transition hover:bg-neutral-200"
+                disabled={
+                  paymentState === "submitting" ||
+                  paymentState === "processing"
+                }
+                className="rounded-xl bg-white px-5 py-3 font-semibold text-black transition hover:bg-neutral-200 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Confirm
+                {paymentState === "submitting"
+                  ? "Starting..."
+                  : paymentState === "processing"
+                    ? "Processing..."
+                    : paymentState === "error"
+                      ? "Try again"
+                      : "Confirm"}
               </button>
             </div>
+
+            <p className="mt-4 text-xs text-neutral-400">
+              PayPal Sandbox only ? no real money is sent.
+            </p>
           </section>
         )}
 
-        {receiptId && selected && intent && (
+        {receipt && paymentState === "success" && selected && intent && (
           <section className="mt-6 rounded-3xl border border-neutral-200 bg-white p-6">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-green-700">
@@ -266,9 +316,9 @@ export default function Home() {
               </div>
 
               <div>
-                <h2 className="font-semibold">Payment complete</h2>
+                <h2 className="font-semibold">Sandbox payment complete</h2>
                 <p className="text-sm text-neutral-500">
-                  Mock transaction for the MVP
+                  PayPal Sandbox transaction
                 </p>
               </div>
             </div>
@@ -280,9 +330,11 @@ export default function Home() {
               <p className="mt-1 text-neutral-600">
                 Paid to {selected.fullName}
               </p>
-              <p className="mt-3 font-mono text-xs text-neutral-400">
-                {receiptId}
-              </p>
+              <div className="mt-4 space-y-1 font-mono text-xs text-neutral-400">
+                <p>Transaction: {receipt.transactionId}</p>
+                <p>Batch: {receipt.batchId}</p>
+                <p>Payout item: {receipt.payoutItemId}</p>
+              </div>
             </div>
           </section>
         )}
