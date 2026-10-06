@@ -1,0 +1,40 @@
+import type { Contact } from "@/types/payment";
+
+export const contacts: Contact[] = [
+  {
+    id: "john-kamau",
+    fullName: "John Kamau",
+    aliases: ["John", "Johnny"],
+    email: "john.kamau@example.com",
+    paypalId: "john.kamau",
+    contextTags: ["dinner", "saturday", "soccer", "28 sep"],
+    lastInteractionDaysAgo: 6,
+    paymentCount30d: 2,
+    typicalAmountMin: 10,
+    typicalAmountMax: 30,
+  },
+  {
+    id: "john-mwangi",
+    fullName: "John Mwangi",
+    aliases: ["John"],
+    email: "john.mwangi@example.com",
+    paypalId: "john.mwangi",
+    contextTags: ["coffee", "work", "lunch"],
+    lastInteractionDaysAgo: 10,
+    paymentCount30d: 1,
+    typicalAmountMin: 30,
+    typicalAmountMax: 50,
+  },
+  {
+    id: "sarah-chen",
+    fullName: "Sarah Chen",
+    aliases: ["Sarah"],
+    email: "sarah.chen@example.com",
+    paypalId: "sarah.chen",
+    contextTags: ["concert", "tickets", "roommate"],
+    lastInteractionDaysAgo: 18,
+    paymentCount30d: 1,
+    typicalAmountMin: 20,
+    typicalAmountMax: 80,
+  },
+];
