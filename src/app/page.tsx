@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { contacts } from "@/data/contacts";
-import { parseIntent } from "@/lib/intent/parseIntent";
+import { parseIntentWithGemini } from "@/lib/intent/client";
 import { resolveRecipient } from "@/lib/resolver/resolveRecipient";
 import {
   createSandboxPayout,
@@ -28,6 +28,7 @@ export default function Home() {
     "idle" | "submitting" | "processing" | "success" | "error"
   >("idle");
   const [error, setError] = useState<string | null>(null);
+  const [isResolving, setIsResolving] = useState(false);
 
   function resetResult() {
     setIntent(null);
@@ -38,12 +39,13 @@ export default function Home() {
     setError(null);
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     resetResult();
+    setIsResolving(true);
 
     try {
-      const parsed = parseIntent(request);
+      const parsed = await parseIntentWithGemini(request);
       const resolution = resolveRecipient(parsed, contacts);
 
       setIntent(parsed);
@@ -58,6 +60,8 @@ export default function Home() {
           ? err.message
           : "Unable to understand that payment request.",
       );
+    } finally {
+      setIsResolving(false);
     }
   }
 
@@ -169,9 +173,10 @@ export default function Home() {
 
             <button
               type="submit"
-              className="rounded-xl bg-black px-5 py-3 font-medium text-white transition hover:bg-neutral-800"
+              disabled={isResolving}
+              className="rounded-xl bg-black px-5 py-3 font-medium text-white transition hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Resolve
+              {isResolving ? "Understanding..." : "Resolve"}
             </button>
           </div>
 
@@ -303,7 +308,7 @@ export default function Home() {
             </div>
 
             <p className="mt-4 text-xs text-neutral-400">
-              PayPal Sandbox only ? no real money is sent.
+              PayPal Sandbox only - no real money is sent.
             </p>
           </section>
         )}
